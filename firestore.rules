@@ -1,0 +1,29 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidCircular(data) {
+      return data.keys().hasAll(['title', 'link', 'createdAt']) &&
+             data.title is string && data.title.size() <= 500 &&
+             data.link is string && data.link.size() <= 1000 &&
+             data.createdAt is timestamp;
+    }
+
+    match /circulars/{circularId} {
+      allow read, create, update, delete: if true;
+    }
+  }
+}

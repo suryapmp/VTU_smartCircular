@@ -1,0 +1,25 @@
+{
+  "entities": {
+    "Circular": {
+      "title": "Circular",
+      "description": "Represents a VTU circular with metadata and content.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "link": { "type": "string", "description": "URL to the circular detail page on VTU website" },
+        "pdfUrl": { "type": "string", "description": "Direct URL to the PDF file" },
+        "refNumber": { "type": "string", "description": "Reference number of the circular" },
+        "date": { "type": "string", "description": "Date of the circular" },
+        "content": { "type": "string", "description": "Extracted text content from the PDF" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "link", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/circulars/{circularId}": {
+      "schema": "Circular",
+      "description": "Store all fetched circulars"
+    }
+  }
+}
