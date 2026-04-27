@@ -1,20 +1,48 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User as UserIcon, Loader2 } from "lucide-react";
+import { Send, Bot, User as UserIcon, Loader2, Volume2, VolumeX } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { GoogleGenAI } from "@google/genai";
 import { Circular } from "../types";
 
-export default function Chatbot({ circulars }: { circulars: Circular[] }) {
+export default function Chatbot({ 
+  circulars, 
+  onViewPdf 
+}: { 
+  circulars: Circular[], 
+  onViewPdf: (circular: Circular) => void 
+}) {
   const [messages, setMessages] = useState<{ 
     role: "user" | "bot", 
     text: string,
     references?: Circular[]
   }[]>([
-    { role: "bot", text: "Hello! I have indexed the VTU repository. You can search by reference number or ask questions about schedules, fees, or regulations." }
+    { role: "bot", text: "Welcome to the VTU Smart Assistant. I am an advanced AI system indexed with thousands of circulars. How can I help you today?" }
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const speak = (text: string, index: number) => {
+    if (window.speechSynthesis.speaking) {
+      window.speechSynthesis.cancel();
+      if (isSpeaking === index) {
+        setIsSpeaking(null);
+        return;
+      }
+    }
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.onend = () => setIsSpeaking(null);
+    setIsSpeaking(index);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const suggestedQuestions = [
+    "Latest Exam Notifications",
+    "Ph.D. Research Extension",
+    "Academic Calendar 2025-26",
+    "AICTE Activity Points"
+  ];
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -36,44 +64,60 @@ export default function Chatbot({ circulars }: { circulars: Circular[] }) {
       
       const genAI = new GoogleGenAI({ apiKey });
       
-      const relevantCirculars = circulars.filter(c => {
-        const searchInput = userMessage.toLowerCase();
-        return (
-          (c.refNumber && searchInput.includes(c.refNumber.toLowerCase())) ||
-          searchInput.split(" ").some(word => word.length > 3 && c.title.toLowerCase().includes(word)) ||
-          (c.content && c.content.toLowerCase().includes(searchInput))
-        );
-      }).slice(0, 5);
+      // Advanced Search: Multi-Stage Filtering
+      const searchInput = userMessage.toLowerCase();
+      
+      // 1. Direct Keyword Match
+      const directMatches = circulars.filter(c => 
+        (c.title.toLowerCase().includes(searchInput))
+      );
 
-      const contextStr = relevantCirculars.length > 0 
-        ? "Context from relevant circulars (Internal PDF Content):\n" + relevantCirculars.map(c => `Title: ${c.title}\nRef: ${c.refNumber}\nContent Snippet: ${c.content?.substring(0, 1000) || "No text extracted yet"}\nLink: ${c.link}`).join("\n\n")
-        : "No direct circular matches found in the local repository. If the user provided a reference number that I don't have yet, I should tell them to click Sync Repository.";
+      // 2. Fuzzy / Semantic Word Match
+      const fuzzyMatches = circulars.filter(c => {
+        const words = searchInput.split(" ").filter(w => w.length > 3);
+        return words.some(word => c.title.toLowerCase().includes(word));
+      });
+
+      // Combine and deduplicate
+      const allRelevant = Array.from(new Set([...directMatches, ...fuzzyMatches])).slice(0, 10);
+
+      // Create a global overview of what's available
+      const repositoryOverview = circulars.slice(0, 30).map(c => `- ${c.title}`).join("\n");
+
+      const contextStr = allRelevant.length > 0 
+        ? "Detailed Document Context:\n" + allRelevant.map(c => `[DOC]: ${c.title}\nID: ${c.id}\nDATE: ${c.date ? c.date.split('T')[0] : 'N/A'}\nSNIPPET: ${c.content?.substring(0, 1200) || "No text extracted"}`).join("\n\n")
+        : "No direct matches found. However, I have access to the repository index. Suggest syncing if the user is looking for very new items.";
 
       const prompt = `
-        You are a VTU Circular Intelligence Assistant.
+        You are the VTU Administrative Intelligence (VTU-AI). 
+        Global Repository Status: ${circulars.length} total indexed documents.
+        Recent Index Overview:
+        ${repositoryOverview}
+
+        Search Context for current query:
         ${contextStr}
 
-        User Question: ${userMessage}
+        User Request: ${userMessage}
 
-        Instructions:
-        1. Professional and concise.
-        2. If relevant circulars are found, summarize key points and provide the title/ref.
-        3. If no info is found, politely state that and suggest checking the official VTU site.
-        4. ALWAYS mention the category if available (e.g., Administration, Academic, etc.).
-        5. If a reference number is asked for, look for it through ALL indexed months/years available in context.
-        6. IMPORTANT: DO NOT use any Markdown formatting like double asterisks (**) for bolding or symbols like '#' for headers. Use clean, plain text for readability.
-        7. Maintain consistent spacing between points for a clean appearance.
+        CRITICAL OPERATING PROCEDURES:
+        1. Be authoritative, professional, and precise.
+        2. If you find a document that matches the query, verify details and provide a clear summary.
+        3. Mention the "Date" clearly in your response (Format: YYYY-MM-DD, do not include time).
+        4. If a specific status is asked (e.g., 'Has results been declared?'), and you don't see it in the context but see other related items, specify what is available.
+        5. DO NOT use double asterisks (**) or markdown headers. Use plain, clean text with clear line breaks.
+        6. Always emphasize that the user can use the "VIEW PDF" button below to see the original signed document.
+        7. If multiple documents are relevant, list them clearly.
       `;
 
       const response = await genAI.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
+        model: "gemini-2.0-flash",
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
       });
 
       setMessages(prev => [...prev, { 
         role: "bot", 
-        text: response.text || "I apologize, I encountered an issue processing that.",
-        references: relevantCirculars
+        text: response.text || "I apologize, I am unable to generate a response at this time.",
+        references: allRelevant
       }]);
     } catch (error: any) {
       console.error("Chat error:", error);
@@ -101,33 +145,52 @@ export default function Chatbot({ circulars }: { circulars: Circular[] }) {
               className={`flex gap-3 md:gap-4 ${m.role === "user" ? "flex-row-reverse" : "flex-row"}`}
             >
               <div className={`w-7 h-7 md:w-8 md:h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                m.role === "bot" ? "bg-primary text-white" : "bg-text-muted text-white"
+                m.role === "bot" ? "bg-slate-800 text-white" : "bg-slate-200 text-slate-600"
               }`}>
                 {m.role === "bot" ? <Bot className="w-3.5 h-3.5 md:w-4 md:h-4" /> : <UserIcon className="w-3.5 h-3.5 md:w-4 md:h-4" />}
               </div>
-              <div className={`max-w-[85%] md:max-w-[70%] p-3 md:p-4 rounded-xl shadow-sm text-xs md:text-sm leading-relaxed ${
+              <div className={`max-w-[85%] md:max-w-[80%] p-3 md:p-4 rounded-xl shadow-sm text-xs md:text-sm leading-relaxed relative group ${
                 m.role === "bot" 
-                  ? "bg-white border border-border-theme text-text-main" 
-                  : "bg-primary text-white"
+                  ? "bg-white border border-slate-200 text-slate-700 font-medium" 
+                  : "bg-slate-800 text-white shadow-md"
               }`}>
                 <div className="whitespace-pre-wrap">{m.text}</div>
                 
-                {/* Preview Card logic using message references */}
+                {m.role === "bot" && (
+                  <button 
+                    onClick={() => speak(m.text, i)}
+                    className="absolute -right-10 top-0 p-2 text-slate-400 hover:text-primary transition-colors opacity-0 group-hover:opacity-100 hidden md:block"
+                    title="Read Response"
+                  >
+                    {isSpeaking === i ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                  </button>
+                )}
+                
+                {/* Reference list with cleaner layout */}
                 {m.role === "bot" && m.references && m.references.length > 0 && (
-                  <div className="mt-4 pt-4 border-t border-border-theme space-y-2">
-                    <div className="text-[10px] font-bold text-text-muted uppercase tracking-tighter">Related Circulars</div>
-                    {m.references.map((c, idx) => (
-                      <div key={idx} className="bg-bg-app p-2 rounded border border-border-theme flex flex-col gap-1">
-                        <div className="text-[11px] font-bold text-primary line-clamp-1">{c.title}</div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-[9px] font-mono text-secondary">{c.refNumber || "No Ref"}</span>
-                          <div className="flex gap-2">
-                             <a href={c.link} target="_blank" rel="noopener noreferrer" className="text-[10px] font-bold text-primary hover:underline">View Post</a>
-                             {c.pdfUrl && <a href={c.pdfUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] font-bold text-secondary hover:underline">PDF</a>}
+                  <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                      <div className="w-1 h-1 bg-primary rounded-full" />
+                      DOCUMENT SOURCES
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {m.references.map((c, idx) => (
+                        <div key={idx} className="bg-slate-50 p-2.5 rounded-lg border border-slate-100 flex flex-col justify-between hover:border-primary/20 transition-all">
+                          <div>
+                            <div className="text-[11px] font-bold text-slate-800 line-clamp-1 mb-0.5">{c.title}</div>
+                          </div>
+                          <div className="flex justify-start items-center gap-2">
+                             <button 
+                               onClick={() => onViewPdf(c)} 
+                               className="text-[10px] font-bold text-primary bg-white px-3 py-1 rounded-md border border-primary/20 hover:bg-primary hover:text-white transition-all shadow-sm"
+                             >
+                               VIEW PDF
+                             </button>
+                             <a href={c.link} target="_blank" rel="noopener noreferrer" className="text-[9px] font-bold text-slate-400 hover:text-slate-600 uppercase tracking-tighter">Official Link</a>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -146,6 +209,19 @@ export default function Chatbot({ circulars }: { circulars: Circular[] }) {
 
       <div className="p-4 md:p-6 bg-white border-t border-border-theme">
         <div className="max-w-4xl mx-auto">
+          {/* Suggested Questions */}
+          <div className="flex flex-wrap gap-2 mb-4 justify-center">
+            {suggestedQuestions.map((q, idx) => (
+              <button
+                key={idx}
+                onClick={() => { setInput(q); }}
+                className="text-[10px] md:text-[11px] font-bold text-slate-500 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-200 hover:border-primary hover:text-primary transition-all select-none"
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+
           <div className="flex gap-2 md:gap-3 bg-bg-app border border-border-theme p-1.5 md:p-2 rounded-xl">
             <input 
               type="text" 

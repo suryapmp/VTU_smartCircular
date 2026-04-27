@@ -15,7 +15,24 @@ import {
   getDocs,
   writeBatch
 } from "firebase/firestore";
-import { Search, Loader2, RefreshCw, FileText, Download, Eye, Globe, Trash2, Menu, X } from "lucide-react";
+import { 
+  Search, 
+  Loader2, 
+  RefreshCw, 
+  FileText, 
+  Download, 
+  Eye, 
+  Globe, 
+  Trash2, 
+  Menu, 
+  X,
+  BookOpen,
+  GraduationCap,
+  Settings,
+  FlaskConical,
+  Volume2,
+  ChevronLeft
+} from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { db } from "./firebase";
 import { Circular } from "./types";
@@ -131,16 +148,9 @@ export default function App() {
   };
 
   const filteredCirculars = circulars.filter(c => {
-    const matchesSearch = c.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      (c.refNumber && c.refNumber.toLowerCase().includes(searchTerm.toLowerCase()));
-    
-    if (selectedYear === "all") return matchesSearch;
-    
-    if (c.date) {
-      const year = new Date(c.date).getFullYear();
-      return matchesSearch && year === selectedYear;
-    }
-    return matchesSearch && selectedYear === "all";
+    const matchesSearch = c.title.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesYear = selectedYear === "all" || (c.date && new Date(c.date).getFullYear() === selectedYear);
+    return matchesSearch && matchesYear;
   });
 
   const extractedYears: number[] = circulars
@@ -253,16 +263,19 @@ export default function App() {
             <div className="text-sm font-bold uppercase tracking-wider text-primary tracking-widest text-[#555]">
               VTU SMART REPOSITORY
             </div>
-            <button 
-              onClick={() => setIsSidebarOpen(false)}
-              className="lg:hidden p-1 hover:bg-slate-100 rounded"
-            >
-              <X className="w-5 h-5 text-slate-500" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setIsSidebarOpen(false)}
+                className="lg:hidden p-1 hover:bg-slate-100 rounded"
+              >
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
           </div>
-          <div className="text-xs text-text-muted flex items-center gap-2">
+
+          <div className="text-xs text-text-muted flex items-center gap-2 mb-2">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            {circulars.length} Circulars Available
+            {circulars.length} Documents Indexed
           </div>
           
           <AnimatePresence>
@@ -334,7 +347,7 @@ export default function App() {
 
         <div className="flex-1 overflow-y-auto p-3 scrollbar-thin">
           <AnimatePresence initial={false}>
-            {filteredCirculars.map((circular) => {
+            {filteredCirculars.map((circular, idx) => {
               const displayDate = circular.publishedDate ? new Date(circular.publishedDate) : (circular.date ? new Date(circular.date) : null);
               const day = displayDate ? displayDate.getDate() : "--";
               const month = displayDate ? displayDate.toLocaleDateString('en-GB', { month: 'short' }).toUpperCase() : "---";
@@ -346,8 +359,13 @@ export default function App() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   onClick={() => circular.pdfUrl && setSelectedPdf(circular.pdfUrl)}
-                  className="flex gap-4 p-4 mb-3 rounded-xl border border-border-theme bg-white hover:border-primary/30 hover:shadow-md cursor-pointer group transition-all"
+                  className={`flex gap-4 p-4 mb-3 rounded-xl border border-border-theme bg-white hover:border-primary/30 hover:shadow-md cursor-pointer group transition-all relative overflow-hidden`}
                 >
+                  {idx < 3 && !searchTerm && (
+                    <div className="absolute top-0 right-0 px-2 py-0.5 bg-red-500 text-white text-[8px] font-bold uppercase rounded-bl-lg animate-pulse z-10">
+                      Latest
+                    </div>
+                  )}
                   <div className="flex flex-col items-center justify-center w-12 h-12 md:w-14 md:h-14 bg-slate-50 border border-slate-100 rounded-lg shrink-0 group-hover:bg-primary/5 group-hover:border-primary/10 transition-colors">
                     <span className="text-lg md:text-xl font-bold text-orange-500 leading-none">{day}</span>
                     <span className="text-[7px] md:text-[8px] font-extrabold text-orange-400 mt-0.5 tracking-tighter">{month} {year}</span>
@@ -365,9 +383,6 @@ export default function App() {
                     </div>
                     
                     <div className="flex items-center gap-2 mt-1">
-                      <div className="text-[9px] font-bold text-primary bg-primary/5 px-1.5 py-0.5 rounded border border-primary/10 truncate max-w-[80px] md:max-w-none">
-                        {circular.refNumber || "No Ref #"}
-                      </div>
                       <div className="text-[9px] font-medium text-slate-400 truncate">
                         {displayDate ? displayDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Syncing...'}
                       </div>
@@ -381,28 +396,36 @@ export default function App() {
                         <Eye className="w-2.5 h-2.5 md:w-3 md:h-3" /> PREVIEW
                       </button>
 
-                      {circular.pdfUrl && (
-                        <a 
-                          href={circular.pdfUrl}
-                          download
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="p-1 px-2.5 bg-emerald-50 text-emerald-700 text-[9px] md:text-[10px] font-bold rounded-lg flex items-center gap-1 hover:bg-emerald-100 transition-colors border border-emerald-100"
-                        >
-                          <Download className="w-2.5 h-2.5 md:w-3 md:h-3" /> DOWNLOAD
-                        </a>
-                      )}
-                      
-                      <a 
-                        href={circular.link} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="p-1 px-2.5 bg-slate-100 text-slate-600 text-[9px] md:text-[10px] font-bold rounded-lg flex items-center gap-1 hover:bg-slate-200 transition-colors"
+                      <button 
+                        onClick={async (e) => { 
+                          e.stopPropagation(); 
+                          if (circular.pdfUrl) {
+                            window.open(circular.pdfUrl, '_blank');
+                          } else {
+                            setStatus("Locating PDF...");
+                            try {
+                              const response = await fetch("/api/get-pdf-link", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ url: circular.link })
+                              });
+                              const data = await response.json();
+                              setStatus(null);
+                              if (data.pdfUrl) {
+                                window.open(data.pdfUrl, '_blank');
+                              } else {
+                                window.open(circular.link, '_blank');
+                              }
+                            } catch {
+                              setStatus(null);
+                              window.open(circular.link, '_blank');
+                            }
+                          }
+                        }}
+                        className="p-1 px-2.5 bg-emerald-50 text-emerald-700 text-[9px] md:text-[10px] font-bold rounded-lg flex items-center gap-1 hover:bg-emerald-100 transition-colors border border-emerald-100"
                       >
-                        <Globe className="w-2.5 h-2.5 md:w-3 md:h-3" /> SOURCE
-                      </a>
+                        <Download className="w-2.5 h-2.5 md:w-3 md:h-3" /> DOWNLOAD
+                      </button>
                     </div>
                   </div>
                 </motion.div>
@@ -425,6 +448,8 @@ export default function App() {
             {scraping ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
             SYNC FROM VTU
           </button>
+          
+          {/* 
           <button 
             onClick={clearAllCirculars}
             disabled={loading || scraping}
@@ -437,6 +462,7 @@ export default function App() {
             <Trash2 className="w-3 h-3" />
             {confirmClear ? "CONFIRM WIPE" : "CLEAR ALL"}
           </button>
+          */}
         </div>
       </aside>
 
@@ -473,7 +499,7 @@ export default function App() {
         </header>
 
         <div className="flex-1 overflow-hidden relative">
-          <Chatbot circulars={circulars} />
+          <Chatbot circulars={circulars} onViewPdf={handleViewPdf} />
         </div>
       </main>
     </div>

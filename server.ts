@@ -66,9 +66,10 @@ async function startServer() {
         const existingSnapshot = await getDocs(collection(db, "circulars"));
         const existingLinks = new Set(existingSnapshot.docs.map(d => d.data().link));
 
-        // administration category
-        for (const cat of ["administration"]) {
-          for (let p = 1; p <= 157; p++) {
+        // VTU Categories to crawl
+        for (const cat of ["academic", "examination", "administration", "research", "tenders", "employment", "general", "circulars"]) {
+          console.log(`Scraping category: ${cat}`);
+          for (let p = 1; p <= 100; p++) {
             const url = p === 1 
               ? `https://vtu.ac.in/en/category/${cat}/` 
               : `https://vtu.ac.in/en/category/${cat}/page/${p}/`;
@@ -95,14 +96,28 @@ async function startServer() {
               let publishedDate = null;
               if (entryDay && entryMonth) {
                 // Combine: "25 Apr 2026"
-                publishedDate = safeToISOString(`${entryDay} ${entryMonth}`);
+                // Try to see if there's a year mentioned nearby or in the link
+                const yearMatch = link?.match(/\/(\d{4})\/(\d{2})\/(\d{2})\//);
+                if (yearMatch) {
+                   publishedDate = safeToISOString(`${yearMatch[1]}-${yearMatch[2]}-${yearMatch[3]}`);
+                } else {
+                   publishedDate = safeToISOString(`${entryDay} ${entryMonth}`);
+                }
               } else {
                 // Fallbacks if snippet not found
                 const dateAttr = $(el).find(".entry-date").first().attr("datetime") || 
                                 $(el).find("time").first().attr("datetime");
                 if (dateAttr) {
                   publishedDate = safeToISOString(dateAttr);
-                } else {
+                } else if (link) {
+                   // link usually looks like: https://vtu.ac.in/en/2026/04/25/circular-title/
+                   const slugMatch = link.match(/\/(\d{4})\/(\d{2})\/(\d{2})\//);
+                   if (slugMatch) {
+                     publishedDate = safeToISOString(`${slugMatch[1]}-${slugMatch[2]}-${slugMatch[3]}`);
+                   }
+                }
+                
+                if (!publishedDate) {
                   const rawText = metaDate.text().trim();
                   if (rawText) publishedDate = safeToISOString(rawText);
                 }
@@ -117,6 +132,7 @@ async function startServer() {
                 pageBatch.push({ 
                   title, 
                   link, 
+                  category: cat,
                   refNumber: refNumber || "",
                   date: publishedDate,
                   publishedDate: publishedDate 
